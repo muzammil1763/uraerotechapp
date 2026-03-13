@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { writeFile } from 'fs/promises'
-import { join } from 'path'
+import { put } from '@vercel/blob'
 
 export async function POST(req: Request) {
   try {
@@ -15,42 +14,31 @@ export async function POST(req: Request) {
     const formData = await req.formData()
     const file = formData.get('file') as File | null
     
-    console.log('Upload attempt - File received:', file ? file.name : 'No file')
-    
     if (!file || !file.name) {
       return NextResponse.json({ error: 'No file uploaded' }, { status: 400 })
     }
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
-      console.log('Invalid file type:', file.type)
       return NextResponse.json({ error: 'File must be an image' }, { status: 400 })
     }
 
     // Validate file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
-      console.log('File too large:', file.size)
       return NextResponse.json({ error: 'File size must be less than 5MB' }, { status: 400 })
     }
-
-    const bytes = await file.arrayBuffer()
-    const buffer = Buffer.from(bytes)
 
     // Generate unique filename
     const timestamp = Date.now()
     const originalName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_')
-    const filename = `${timestamp}-${originalName}`
+    const filename = `products/${timestamp}-${originalName}`
     
-    // Save to public/products folder
-    const path = join(process.cwd(), 'public', 'products', filename)
-    await writeFile(path, buffer)
+    // Upload to Vercel Blob
+    const blob = await put(filename, file, {
+      access: 'public',
+    })
 
-    console.log('File uploaded successfully:', filename)
-
-    // Return the public URL
-    const imageUrl = `/products/${filename}`
-    
-    return NextResponse.json({ imageUrl }, { status: 200 })
+    return NextResponse.json({ imageUrl: blob.url }, { status: 200 })
   } catch (error) {
     console.error('Error uploading file:', error)
     return NextResponse.json({ 
